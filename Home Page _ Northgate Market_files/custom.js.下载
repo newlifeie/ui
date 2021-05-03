@@ -1,0 +1,405 @@
+var specialKeys = new Array();
+    specialKeys.push(8); //Backspace
+    function IsNumeric(e) {
+        var keyCode = e.which ? e.which : e.keyCode
+        var ret = ((keyCode >= 48 && keyCode <= 57) || specialKeys.indexOf(keyCode) != -1);
+        return ret;
+    }
+function redirectWithCurrentLocation() {
+	  var querystring = "?geosearch=1";
+    if (lang == "en") {
+        window.location = siteUrl+"/locations"+querystring;
+    } else {
+        window.location = siteUrl+"/es/ubicaciones"+querystring;
+    }	
+}
+
+function redirectWithZipcode() {
+  	var globalzipcode = jQuery("#externalSearchInput").val();
+	  var querystring = "?search="+globalzipcode;
+    if (lang == "en") {
+	      window.location = siteUrl+"/locations"+querystring;
+    } else {
+        window.location = siteUrl+"/es/ubicaciones"+querystring;
+    }
+}
+
+if (typeof window.location.search !='undefined' && window.location.search !='') {
+    var searchElement=  window.location.search.split('=')
+    if (typeof searchElement !='undefined' && searchElement[0] == '?search') {
+        jQuery('#city_zip').val(searchElement[1])
+        jQuery("#gform_location").click();
+    }
+    if (typeof searchElement !='undefined' && searchElement[0] == '?geosearch') {
+        currentlocation();
+    }
+}
+
+function listingshowingmarket() {
+    if (lang == "en") {
+        window.location = siteUrl+"/locations";
+    } else {
+        window.location = siteUrl+"/es/ubicaciones";
+    }
+}
+
+function subscribe(e) {
+    jQuery("#gform_ajax_spinner_2").show();
+    event.preventDefault();
+    var request = jQuery.ajax({
+        url: siteUrl+"/subscribe",
+        type: "POST",
+        dataType: "json",
+        data: {
+            "email": jQuery("#input_2_1").val()
+        },
+        async: true,
+    });
+    request.success(function(data) {
+    		jQuery("#gform_ajax_spinner_2").hide();
+        if (data.code == 2) {
+            jQuery("#gform_2").hide();
+            jQuery("#gform_confirmation_message_2").show();
+        }
+        jQuery("#requerdmsg").text(data.message);
+    });
+    request.error(function(error) {
+       	console.log(error);
+    });
+}
+
+jQuery("#city_zip").keyup(function(event) {
+    if (event.keyCode === 13) {
+        jQuery("#gform_location").click();
+    }
+});
+
+jQuery("#externalSearchInput").keyup(function(event) {
+    if (event.keyCode === 13) {
+        jQuery("#gform_location").click();
+    }
+});
+
+function currentlocation() {
+    if (navigator.geolocation) {
+        jQuery("#spin").show();
+        navigator.geolocation.getCurrentPosition(function(location) {
+            currentlatitude = location.coords.latitude;
+            currentlongitude = location.coords.longitude;
+            latitude = currentlatitude
+            longitude= currentlongitude
+            jQuery.ajax({
+                url: siteUrl+"/locations/getLetLongData",
+                type: "POST",
+                dataType: "json",
+                data: {
+                    "let" :  latitude,
+                    "long":  longitude
+                },
+                async: true,
+                success:function(data) {
+                    jQuery("#spin").hide();
+                    jQuery("#DistanceWiseListing").show();
+                    jQuery('#StoreLocationList').html(data.response); 
+                    var mapProp= {
+                        center:new google.maps.LatLng(34.0562797,-118.24674340000001),
+                        zoom:10,
+                        mapTypeControlOptions: {
+                            mapTypeIds: [google.maps.MapTypeId.ROADMAP, 'tehgrayz']
+                        }
+                    };
+                    var stylez = [
+                    {
+                        featureType: "all",
+                        elementType: "all",
+                        stylers: [
+                        { saturation: -100 } // <-- THIS
+                        ]
+                    }
+                    ];
+                    var map=new google.maps.Map(document.getElementById("googleMap"),mapProp);
+                    var mapType = new google.maps.StyledMapType(stylez, { name:"Grayscale" });    
+                    map.mapTypes.set('tehgrayz', mapType);
+                    map.setMapTypeId('tehgrayz');
+                    var infowindo = new google.maps.InfoWindow;
+                    Array.prototype.forEach.call(data.markerdata, function(data) {
+                        var html="<div class='map_popup'><h3>#title</h3><p>#phone</p><p>#address</p><a href='#direction' target='_blank' class='mt-google-map btn-google-map btn-pink'>GET DIRECTIONS</a></div>"
+
+                        html=html.replace('#title',data.title).replace('#phone',data.phone).replace('#address',data.address).replace('#direction','https://maps.google.fr/maps?saddr=' + latitude + ',' + longitude + '&daddr=' + data.address);
+                        // html=html.replace('#title',data.title).replace('#phone',data.phone).replace('#address',data.address).replace('#direction','https://www.google.com/maps/place/'+data.address);
+                        var iconBase = '../Icons/';
+                        var marker = new google.maps.Marker({
+                            position : new google.maps.LatLng(data.lat , data.lon ),
+                            map : map,
+                            icon: iconBase + 'location-marker.png',
+                        });
+                        marker.addListener('click', function() {
+                            infowindo.setContent(html);
+                            infowindo.open(map,marker);
+                        })
+                    })
+                }
+            });
+        });
+    } else {
+        jQuery("#noresult_section").show();
+    }
+}
+
+function storelocation(e) {
+    jQuery("#spin").show();
+    if (jQuery("#city_zip").val() == "" || jQuery("#city_zip").val() == null) {
+        jQuery("#spin").hide();
+    }
+    var zipcode = jQuery("#city_zip").val();    
+    jQuery.ajax({
+        url : "https://maps.googleapis.com/maps/api/geocode/json?address="+zipcode+"&key=AIzaSyDER9UGqNwaA53veojfDPXo0ou3pO2WdOw",
+        method: "POST",
+        success:function(data) {
+            console.log(lang);
+            getlang=lang;
+            jQuery("#zipcode_section").hide();
+            jQuery("#spin").hide();
+            if (data.status == "OK") {
+                latitude = data.results[0].geometry.location.lat;
+                longitude= data.results[0].geometry.location.lng;
+                jQuery.ajax({
+                    url: "/locations/getLetLongData",
+                    type: "POST",
+                    dataType: "json",
+                    data: {
+                        "let" :  latitude,
+                        "long":  longitude,
+                        "getlanguage":getlang
+                    },
+                    async: true,
+                    success:function(data) {
+                        jQuery("#DistanceWiseListing").show();
+                        jQuery('#StoreLocationList').html(data.response); 
+                        var mapProp= {
+                            center:new google.maps.LatLng(34.0562797,-118.24674340000001),
+                            zoom:10,
+                            mapTypeControlOptions: {
+                                mapTypeIds: [google.maps.MapTypeId.ROADMAP, 'tehgrayz']
+                            }
+                        };
+                        var stylez = [
+                        {
+                            featureType: "all",
+                            elementType: "all",
+                            stylers: [
+                            { saturation: -100 } // <-- THIS
+                            ]
+                        }
+                        ];
+                        var map=new google.maps.Map(document.getElementById("googleMap"),mapProp);
+                        var mapType = new google.maps.StyledMapType(stylez, { name:"Grayscale" });    
+                        map.mapTypes.set('tehgrayz', mapType);
+                        map.setMapTypeId('tehgrayz');
+                        var infowindo = new google.maps.InfoWindow;
+                        Array.prototype.forEach.call(data.markerdata, function(datamarker) {
+                            var html="<div class='map_popup'><h3>#title</h3><p>#phone</p><p>#address</p><a href='#direction' target='_blank' class='mt-google-map btn-google-map btn-pink'>GET DIRECTIONS</a></div>"
+
+                            html=html.replace('#title',datamarker.title).replace('#phone',datamarker.phone).replace('#address',datamarker.address).replace('#direction','https://maps.google.fr/maps?saddr=' + latitude + ',' + longitude + '&daddr=' + datamarker.address);
+                            // html=html.replace('#title',data.title).replace('#phone',data.phone).replace('#address',data.address).replace('#direction','https://www.google.com/maps/place/'+data.address);
+                            var iconBase = '../Icons/';
+                            var marker = new google.maps.Marker({
+                                position : new google.maps.LatLng(datamarker.lat , datamarker.lon ),
+                                map : map,
+                                icon: iconBase + 'location-marker.png',
+                            });
+                            marker.addListener('click', function() {
+                                infowindo.setContent(html);
+                                infowindo.open(map,marker);
+                            })
+                        })
+                    }
+                });
+            }
+            if (data.status == "ZERO_RESULTS") {
+                jQuery("#noresult_section").show();
+            }
+        }
+    });
+}
+
+function showzipsection() {
+    jQuery("#noresult_section").hide(); 
+    jQuery("#zipcode_section").show(); 
+}
+
+jQuery(document).ready(function() {
+    jQuery("#gform_1").validate({ 
+        rules: {
+            "input_1_1": {
+                required: true,
+                minlength: 0
+            },
+            "input_1_2": {
+                required: true,
+                email: true
+            },
+            "input_1_6": {
+                required: true,
+                minlength: 0
+            },
+            "input_1_4": {
+                required: true,
+                minlength: 0
+            }
+        },
+        messages: {
+            "input_1_1": {
+                required: "This field is required."
+            },
+            "input_1_2": {
+                required: "This field is required.",
+                email: "Email is invalid"
+            },
+            "input_1_6": {
+                required: "This field is required."
+            },
+            "input_1_4": {
+                required: "This field is required."
+            }
+        },
+    });  
+});
+
+function addcontact(e) {
+    jQuery("#gform_ajax_spinner_1").show();
+
+    // jQuery('input[type="checkbox"]').change(function() {
+    //         if(jQuery(this).is(":checked")) {
+    //             jQuery(".containerBlock input:checked ~ .checkmark").css("border-color","white","border-width","1px");
+    //         }else{
+    //             jQuery(".checkmark").css({"border-color": "red", "border-width": "1px"});
+
+    //         }
+            
+    // });
+
+    // if(jQuery("#input_1_9:checked").val() === undefined){
+    //     jQuery(".checkmark").css({"border-color": "red", "border-width": "1px"});
+    // }
+    // else{
+    //     jQuery(".containerBlock input:checked ~ .checkmark").css("border-color","white","border-width","1px");
+
+    // }
+
+
+    if(jQuery("#gform_1").valid())
+
+    {
+        jQuery("input,textarea,select").attr('disabled', true);
+
+        event.preventDefault();
+        var request = jQuery.ajax({
+            url: siteUrl+"/savecontact",
+            type: "POST",
+            dataType: "json",
+            data: {
+                "name": jQuery("#input_1_1").val(),
+                "email": jQuery("#input_1_2").val(),
+                "phone": jQuery("#input_1_3").val(),
+                "store": jQuery("#input_1_4").val(),
+                "subject": jQuery("#input_1_6").val(),
+                "Message": jQuery("#input_1_5").val(),
+                "Lang": jQuery("#input_1_7").val()//added for form
+            },
+            async: true,
+        });
+        request.success(function(data){
+            console.log("done",data);
+            jQuery('#gform_1')[0].reset();
+            jQuery("#gform_1").hide();
+            jQuery("#gform_ajax_spinner_1").hide();
+            jQuery("#gform_confirmation_wrapper_1").show();
+        });
+        request.error(function(error){
+            console.log(error);
+        });
+    } else {
+        jQuery("#validation_msg").show();
+        jQuery("#gform_ajax_spinner_1").hide();
+        return false;
+    }
+}
+
+function loadMore() {
+    var offset = jQuery("#offset").val();
+    var request = jQuery.ajax({
+        url: "/recipe/getPaginatedData",
+        type: "POST",
+        dataType: "json",
+        data: {
+            "page": offset,
+            'lang':lang
+        },
+        async: true,
+    });
+    request.success(function(data) {
+        var offset = jQuery("#offset").val();
+        offset = parseInt(offset)+1;
+        jQuery("#offset").val(offset);
+        if (data.recipes < 6) {
+            jQuery("#btnloading").hide();
+        }
+        jQuery('#recipeList').append(data.response);
+    })
+}
+
+function loadMoreWithCategory(slug) {
+    var offset = jQuery("#offset").val();
+    var request = jQuery.ajax({
+        url: "/recipe/getPaginatedDataWithCategory",
+        type: "POST",
+        dataType: "json",
+        data: {
+            "page": offset,
+            "slug":slug,
+            'lang':lang
+        },
+        async: true,
+    });
+    request.success(function(data) {
+        var offset = jQuery("#offset").val();
+        offset = parseInt(offset)+1;
+        jQuery("#offset").val(offset);
+        if (data.result < 6) {
+            jQuery("#btnloading").hide();
+        }
+        jQuery('#recipeList').append(data.response);
+    })
+}
+
+function getSize() {
+    size = jQuery("html").css("font-size" );
+    size = parseInt(size, 10);
+    jQuery("#font-size").text(size);
+}
+
+//get inital font size
+getSize();
+
+jQuery(".increasefont").on("click", function() {
+    // parse font size, if less than 50 increase font size
+    if ((size + 1) <= 20) {
+        jQuery("html").css("font-size", "+=1" );
+        jQuery("#font-size").text(size += 1 );
+        console.log("clicked +");
+    }
+});
+
+jQuery(".decreasefont").on("click", function() {
+  if ((size - 1) >= 16) {
+    jQuery("html").css("font-size", "-=1" );
+    jQuery("#font-size").text(size -= 1  );
+    console.log("clicked -");
+  }
+});
+
+jQuery(".normalfont").on("click", function() {
+    console.log("clicked 0");
+    jQuery("html").css("font-size", "16px" );
+});
